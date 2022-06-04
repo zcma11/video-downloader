@@ -1,0 +1,12 @@
+{
+  "name": "video-downloader",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "bin": {
+    "vd": "./index.js"
+  },
+  "dependencies": {
+    "commander": "^9.3.0"
+  }
+}

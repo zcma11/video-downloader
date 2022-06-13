@@ -4,7 +4,7 @@ const fs = require('fs')
 const http = require('http')
 const https = require('https')
 const childProcess = require('child_process')
-const { errorColor, isRegExp, isString } = require('./lib/utils')
+const { errorColor, isRegExp, isString, formatM3U8Url } = require('./lib/utils')
 const { checkFile, createDir, write } = require('./lib/fs')
 const useThead = require('./lib/useThead')
 const { Command } = require('commander')
@@ -15,6 +15,9 @@ const FILE_EXT = '.mp4'
 const FILE_M3U8 = 'media.m3u8'
 const DEFAULT_OUTPUT = './dist'
 const M3U8_URL_REG = /(?<="|\n)([^#\n]+?)(?="|\n)/g
+const KEY_REG = /{(.*)}/
+const hasKey = c => c.match('#EXT-X-KEY')
+const KEY_LINE_REG = /(#EXT-X-KEY.*?\n)/
 
 program
   .option('-c <configFile>')
@@ -43,26 +46,53 @@ program
       createDir(unExistPath, existPath)
     }
 
-    const { source, fileContent } = await parseSource(config.source)
-    if (!source.length || !fileContent) return
+    const originSource = await parseSource(config.source)
+    let source = originSource.source
+    let fileContent = originSource.fileContent
+
+    if (!source.length || !fileContent) {
+      console.log(errorColor('[error] can not find source'))
+      return
+    }
+
+    // handle .key v1.1
+    if (hasKey(fileContent)) {
+      try {
+        const afterProcessing = await parseKey(source, fileContent, outputDir)
+        source = afterProcessing.source
+        fileContent = afterProcessing.fileContent
+      } catch (error) {
+        console.log(
+          errorColor('[error] fail to create .key\n  ') + error + '\n'
+        )
+      }
+    }
 
     const fileList = path.resolve(outputDir, FILE_M3U8)
 
-    await write(fileList, async _write => {
-      let finalContent = ''
-      finalContent = fileContent.replace(M3U8_URL_REG, _ => {
-        return path
-          .resolve(
-            process.cwd(),
+    try {
+      console.log('save .m3u8\n')
+      await write(fileList, async _write => {
+        let finalContent = ''
+        finalContent = fileContent.replace(M3U8_URL_REG, _ => {
+          const srcLine = _.split('/').find(s => s.match(fileName))
+          if (!srcLine) {
+            return _
+          }
+
+          return formatM3U8Url(
             path.resolve(
-              path.relative(process.cwd(), outputDir),
-              _.split('/').find(s => s.match(fileName))
+              process.cwd(),
+              path.resolve(path.relative(process.cwd(), outputDir), srcLine)
             )
           )
-          .replace(/\\/g, '/') /* for window */
+        })
+
+        return _write(finalContent.trim())
       })
-      return _write(finalContent.trim())
-    })
+    } catch (error) {
+      console.log(errorColor('[warn] fail to save .m3u8\n  ' + error))
+    }
 
     let count = 0
     const fufillFile = path.resolve(outputDir, 'fulfill.txt')
@@ -73,11 +103,16 @@ program
         ? [...new Set(fs.readFileSync(fufillFile, 'utf8').split('\n'))]
         : []
     const failure = []
+    for (let _src of source) {
+      const src = baseUrl ? baseUrl + _src : _src
 
-    for (let src of source) {
       if (fulfill.includes(src)) {
+        console.log(
+          `${src} is downloaded. schedule: ${++count}/${source.length}`
+        )
         continue
       }
+
       if (baseUrl) {
         // download and merge online file
         let pathName
@@ -101,7 +136,7 @@ program
             throw new Error('fileName must be a string but got ', fileName)
         }
 
-        const url = baseUrl + src
+        const url = src
         const task = async () => {
           const res = await write(pathName, async _write => {
             return download(url, () => _write)
@@ -155,10 +190,10 @@ program
     await new Promise(resolve => {
       childProcess
         .exec(
-          `cd ${outputDir} && ffmpeg -i ${FILE_M3U8} -c copy ${outputFile}`,
+          `cd ${outputDir} && ffmpeg -allowed_extensions ALL -i ${FILE_M3U8} -c copy ${outputFile}`,
           (err, stdout) => {
             if (err) {
-              console.log(err + '\nfail to convert m3u8')
+              console.log(errorColor(err + '\nfail to convert m3u8\n'))
             } else {
               console.log(stdout)
               console.log('creating...')
@@ -181,6 +216,7 @@ program.configureOutput({
 program.parse(process.argv)
 
 function parseSource(source) {
+  console.log('parse source')
   return new Promise(async resolve => {
     try {
       if (source.startsWith('http')) {
@@ -202,11 +238,21 @@ function parseSource(source) {
         source = fs.readFileSync(file, 'utf8')
       }
 
-      console.log(source.match(M3U8_URL_REG))
+      // add for key v1.1
+      if (hasKey(source)) {
+        const line = KEY_LINE_REG.exec(source)[0]
+        const url = line.match(M3U8_URL_REG)[0]
+        source = source.replace(url, `{${url}}`)
+      }
+
       const urlList = source.match(M3U8_URL_REG) || []
       resolve({ source: urlList, fileContent: source })
     } catch (error) {
-      console.log(error)
+      console.log(
+        errorColor(
+          '[error] Encountered an unknown error, when parsing source.\n  '
+        ) + error
+      )
       resolve({ source: [], fileContent: '' })
     }
   })
@@ -237,4 +283,28 @@ function download(url, action) {
           .on('error', reject)
       })
   })
+}
+
+// v1.1
+async function parseKey(source, fileContent, outputDir) {
+  const matchResult = fileContent.match(KEY_REG)
+  if (!matchResult) {
+    return { source, fileContent }
+  }
+
+  const url = matchResult[1]
+  let file = path.resolve(url)
+
+  if (url.startsWith('http')) {
+    file = path.resolve(outputDir, '1.key')
+    await write(file, _write => {
+      return download(url, () => _write)
+    })
+  }
+
+  fileContent = fileContent.replace(matchResult[0], _ => {
+    return formatM3U8Url(file)
+  })
+  source = source.filter(s => s !== matchResult[0])
+  return { source, fileContent }
 }

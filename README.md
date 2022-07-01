@@ -7,13 +7,13 @@
 
 1. create a Javascript file under **config**
 
-| Prop       | Description             | Type   | Default                       |
-| ---------- | ----------------------- | ------ | ----------------------------- |
-| outputFile | fileName of mp4         | string | `-`                           |
-| fileName   | match url from .m3u8    | regexp | `-`                           |
-| outputDir  | all files save in in it | string | `./dist`                      |
-| baseUrl    | fileName of mp4         | string | if empty, load local fragment |
-| source     | url of m3u8             | string | `-`                           |
+| Prop       | Description                                 | Type   | Default                       |
+| ---------- | ------------------------------------------- | ------ | ----------------------------- |
+| outputFile | fileName of mp4                             | string | `-`                           |
+| fileName   | match media extension from url of m3u8 file | regexp | `-`                           |
+| outputDir  | all files save in in it                     | string | `./dist`                      |
+| baseUrl    | host of media file                          | string | if empty, load local fragment |
+| source     | url of m3u8(online or local)                | string | `-`                           |
 
 ```js
 // config/a.js

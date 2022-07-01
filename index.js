@@ -37,8 +37,8 @@ program
     }
 
     for (let i = 0; i < config.length; i++) {
+      const conf = config[i]
       try {
-        const conf = config[i]
         console.log(`[vd] handle ${conf.outputFile}`)
         await main({ c, reload }, conf)
         console.log(
@@ -296,6 +296,7 @@ function download(url, action) {
     }
 
     const reject = _ => {
+      console.log(errorColor(`[error] fail to download url\n  ${_}`))
       _reject(_)
     }
 

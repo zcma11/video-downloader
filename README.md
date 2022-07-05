@@ -19,12 +19,41 @@
 // config/a.js
 
 module.exports = {
-  outputFile: /\.ts/,
-  fileName: 'foo.mp4',
+  outputFile: 'foo.mp4',
+  fileName: /\.ts/,
   baseUrl: 'http:**',
   outputDir: './dist/**',
   source: './dist/*.m3u8' | 'http:**'
 }
+
+// with jsdoc
+// path is see to the position of your config file
+const { createConfig } = require(path.resolve(__dirname, '../lib/helper.js'))
+createConfig({
+  outputFile: 'foo.mp4',
+  fileName: /\.ts/,
+  baseUrl: 'http:**',
+  outputDir: './dist/**',
+  source: './dist/*.m3u8' | 'http:**'
+})
+```
+
+Maybe you can create config with function. Finally export an array.
+
+```js
+  // config/a.js
+  const create = (source, name, dir) => {
+    const baseUrl = source.match(/* your reg */)[0]
+    return {
+      source,
+      baseUrl,
+      outputDir: `./dist/${dir}/${name}`,
+      outputFile: `${name}.mp4`,
+      fileName: /\.ts/
+    }
+  }
+
+  module.exports = [....].map((...) => create(...))
 ```
 
 2. run
@@ -35,8 +64,12 @@ module.exports = {
   vd -c a.js
 ```
 
-It will automatically save the download record. If you need to download again, please delete `fulfill.txt` or `vd -c a.js -re`.
+It will automatically save the download record. If you need to download again, please delete `fulfill.txt` or use `vd -c a.js -re`.
 
-### ---
+## note!
+
+1. the path of file or the file name shouldn't have any white space.
+
+## ---
 
 to be continue...

@@ -88,6 +88,7 @@ async function main({ reload }, config) {
   // handle .key v1.1
   const IS_ENCRYPTION = hasKey(fileContent)
   if (IS_ENCRYPTION) {
+    reload = true
     try {
       const afterProcessing = await parseKey(source, fileContent, outputDir)
       source = afterProcessing.source
@@ -217,7 +218,10 @@ async function main({ reload }, config) {
   await new Promise(resolve => {
     childProcess
       .exec(
-        `cd ${outputDir} && ffmpeg -allowed_extensions ALL -i ${FILE_M3U8} -c copy ${outputFile}`,
+        `ffmpeg -allowed_extensions ALL -i ${path.resolve(
+          outputDir,
+          FILE_M3U8
+        )} -c copy ${path.resolve(outputDir, outputFile)}`,
         (err, stdout) => {
           if (err) {
             console.log(errorColor(err + '\nfail to convert m3u8\n'))
@@ -336,4 +340,3 @@ async function parseKey(source, fileContent, outputDir) {
   source = source.filter(s => s !== matchResult[0])
   return { source, fileContent }
 }
-

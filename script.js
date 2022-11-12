@@ -113,7 +113,10 @@ async function main({ reload }, config) {
         return formatM3U8Url(
           path.resolve(
             process.cwd(),
-            path.resolve(path.relative(process.cwd(), outputDir), srcLine)
+            path.resolve(
+              path.relative(process.cwd(), outputDir),
+              srcLine.replace(/\?.*/, '')
+            )
           )
         )
       })
@@ -166,17 +169,20 @@ async function main({ reload }, config) {
 
       const url = src
       const task = async () => {
-        const res = await write(pathName, async _write => {
-          return download(url, () => _write)
-            .then(_ => {
-              fulfill.push(url)
-              return _
-            })
-            .catch(_ => {
-              failure.push(url)
-              return _
-            })
-        })
+        const res = await write(
+          pathName.replace(/(\?.*)/, ''),
+          async _write => {
+            return download(url, () => _write)
+              .then(_ => {
+                fulfill.push(url)
+                return _
+              })
+              .catch(_ => {
+                failure.push(url)
+                return _
+              })
+          }
+        )
 
         console.log(
           `${pathName} is over. schedule: ${++count}/${source.length}`
@@ -211,7 +217,13 @@ async function main({ reload }, config) {
   }
 
   if (failure.length || !fulfill.length) {
-    process.exit(0)
+    await new Promise(resolve => {
+      setTimeout(() => {
+        resolve()
+      }, 3000)
+    })
+    console.log(errorColor('exit with failure file'))
+    process.exit(1)
   }
   console.log(`\ntry to convert ${FILE_M3U8} to ${outputFile}`)
 

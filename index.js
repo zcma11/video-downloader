@@ -1,2 +1,2 @@
 const { createConfig } = require('./lib/helper')
-module.export = { createConfig }
+module.exports = { createConfig }

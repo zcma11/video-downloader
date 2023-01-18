@@ -24,6 +24,7 @@ const M3U8_URL_REG = /(?<="|\n)([^#\n]+?)(?="|\n)/g
 const KEY_REG = /{(.*)}/
 const hasKey = c => c.match('#EXT-X-KEY')
 const KEY_LINE_REG = /(#EXT-X-KEY.*?\n)/
+const DEFAULT_FILE_NAME_REGEXP = /\.(?:mp4|ts|m4s)/
 
 program
   .option('-c <configFile>')
@@ -55,12 +56,12 @@ program
   })
 
 async function main({ reload }, config) {
-  let defaultName = 1
   const {
     outputDir: _outputDir = DEFAULT_OUTPUT,
-    fileName = defaultName,
+    fileName = DEFAULT_FILE_NAME_REGEXP,
     baseUrl,
-    outputFile
+    outputFile,
+    cookies = []
   } = config
   const outputDir = path.resolve(process.cwd(), _outputDir)
 
@@ -76,7 +77,7 @@ async function main({ reload }, config) {
     createDir(unExistPath, existPath)
   }
 
-  const originSource = await parseSource(config.source)
+  const originSource = await parseSource(config.source, cookies)
   let source = originSource.source
   let fileContent = originSource.fileContent
 
@@ -90,7 +91,12 @@ async function main({ reload }, config) {
   if (IS_ENCRYPTION) {
     reload = true
     try {
-      const afterProcessing = await parseKey(source, fileContent, outputDir)
+      const afterProcessing = await parseKey(
+        source,
+        fileContent,
+        outputDir,
+        cookies
+      )
       source = afterProcessing.source
       fileContent = afterProcessing.fileContent
     } catch (error) {
@@ -115,7 +121,7 @@ async function main({ reload }, config) {
             process.cwd(),
             path.resolve(
               path.relative(process.cwd(), outputDir),
-              srcLine.replace(/\?.*/, '')
+              srcLine.replace(/(\?.*)/, '')
             )
           )
         )
@@ -167,12 +173,13 @@ async function main({ reload }, config) {
           throw new Error('fileName must be a string but got ', fileName)
       }
 
+      pathName = pathName.replace(/(\?.*)/, '')
       const url = src
       const task = async () => {
         const res = await write(
-          pathName.replace(/(\?.*)/, ''),
+          pathName,
           async _write => {
-            return download(url, () => _write)
+            return download(url, () => _write, cookies)
               .then(_ => {
                 fulfill.push(url)
                 return _
@@ -258,24 +265,28 @@ program.configureOutput({
 })
 program.parse(process.argv)
 
-function parseSource(source) {
+function parseSource(source, cookies) {
   console.log('parse source')
   return new Promise(async resolve => {
     try {
       if (source.startsWith('http')) {
-        const res = await download(source, res => {
-          res.result = ''
-          return data => {
-            res.result += data.toString()
-          }
-        })
+        const res = await download(
+          source,
+          res => {
+            res.result = ''
+            return data => {
+              res.result += data.toString()
+            }
+          },
+          cookies
+        )
 
         source = res.result
       } else if (isString(source)) {
         const file = path.resolve(process.cwd(), source)
         const { isExist } = checkFile(file)
         if (!isExist) {
-          return
+          return resolve({ source: [], fileContent: '' })
         }
 
         source = fs.readFileSync(file, 'utf8')
@@ -289,6 +300,7 @@ function parseSource(source) {
       }
 
       const urlList = source.match(M3U8_URL_REG) || []
+
       resolve({ source: urlList, fileContent: source })
     } catch (error) {
       console.log(
@@ -301,14 +313,20 @@ function parseSource(source) {
   })
 }
 
-function download(url, action) {
+function download(url, action, cookies = []) {
   return new Promise((resolve, _reject) => {
     let request
     switch (url.match(/https?/)[0]) {
       case 'http':
-        request = http.get(url, { timeout: 10000 })
+        request = http.get(url, {
+          timeout: 10000,
+          headers: { Cookie: cookies }
+        })
       case 'https':
-        request = https.get(url, { timeout: 10000 })
+        request = https.get(url, {
+          timeout: 10000,
+          headers: { Cookie: cookies }
+        })
     }
 
     const reject = _ => {
@@ -330,7 +348,7 @@ function download(url, action) {
 }
 
 // v1.1
-async function parseKey(source, fileContent, outputDir) {
+async function parseKey(source, fileContent, outputDir, cookies) {
   const matchResult = fileContent.match(KEY_REG)
   if (!matchResult) {
     return { source, fileContent }
@@ -342,7 +360,7 @@ async function parseKey(source, fileContent, outputDir) {
   if (url.startsWith('http')) {
     file = path.resolve(outputDir, '1.key')
     await write(file, _write => {
-      return download(url, () => _write)
+      return download(url, () => _write, cookies)
     })
   }
 
@@ -351,4 +369,10 @@ async function parseKey(source, fileContent, outputDir) {
   })
   source = source.filter(s => s !== matchResult[0])
   return { source, fileContent }
+}
+
+module.exports = {
+  download,
+  parseKey,
+  parseSource
 }

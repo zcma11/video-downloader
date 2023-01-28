@@ -111,7 +111,7 @@ async function main({ reload }, config) {
     await write(fileList, async _write => {
       let finalContent = ''
       finalContent = fileContent.replace(M3U8_URL_REG, _ => {
-        const srcLine = _.split('/').find(s => s.match(fileName))
+        const srcLine = _.split('/').reverse().find(s => s.match(fileName))
         if (!srcLine) {
           return _
         }
@@ -165,7 +165,7 @@ async function main({ reload }, config) {
           if (isRegExp(fileName)) {
             pathName = path.resolve(
               outputDir,
-              src.split('/').find(s => s.match(fileName))
+              src.split('/').reverse().find(s => s.match(fileName))
             )
           }
           break
